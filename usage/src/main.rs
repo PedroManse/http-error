@@ -1,8 +1,18 @@
 use http_error_macro;
 
 fn main() {
+    let x = SQLY(0, 1);
     println!("Hello :)");
 }
+
+struct E {
+    a: i32
+}
+
+http_error_macro::http_error!(
+    SQLY=(i32, i32)
+);
+//    SQLX=E
 
 //http_error! ( mod se // optinaly put into a module
 //    SocError {
