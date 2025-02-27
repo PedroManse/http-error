@@ -1,3 +1,4 @@
+use http_error_macro;
 
 fn main() {
     println!("Hello :)");
