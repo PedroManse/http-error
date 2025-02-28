@@ -4,17 +4,43 @@ use proc_macro2::TokenStream as TS2;
 use quote::quote;
 use syn::{*, parse::{Parse, ParseStream}};
 
-use self::punctuated::Punctuated;
-
 trait Render {
     fn render(self) -> TS2;
 }
 
 #[derive(Debug)]
 struct HttpError {
-    mod_name: Option<Ident>,
     name: Ident,
     items: ItemSeq,
+}
+
+impl Parse for HttpError {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name = input.parse::<Ident>()?;
+        let content;
+        let _ = braced!(content in input);
+        let items = content.parse()?;
+        Ok(HttpError{
+            name,
+            items
+        })
+    }
+}
+
+impl Render for HttpError {
+    fn render(self) -> TS2 {
+        let name = self.name;
+        let items = self.items;
+        let items_names: Vec<_> = items.0.iter().map(|i|i.name.clone()).collect();
+        let items_defs = items.render();
+        let x = quote!{
+            pub enum #name {
+                #(#items_names(#items_names)),*
+            }
+            #items_defs
+        };
+        x
+    }
 }
 
 #[derive(Debug)]
@@ -86,18 +112,16 @@ impl Render for ErrorInfo {
     fn render(self) -> TS2 {
         let name = self.name;
         match self.item {
-            ErrorItem::Alias(i)=>quote! {type #name = #i;},
-            ErrorItem::Tuple(e)=>quote! {struct #name #e;},
-            ErrorItem::Struct(s)=>quote! {struct #name #s}
+            ErrorItem::Alias(i)=>quote! {pub type #name = super::#i;},
+            ErrorItem::Tuple(e)=>quote! {pub struct #name #e;},
+            ErrorItem::Struct(s)=>quote! {pub struct #name #s}
         }
     }
 }
 
 #[proc_macro]
 pub fn http_error(item: TS) -> TS {
-    let a = syn::parse(item);
-    let e: ItemSeq = a.unwrap();
-    let x = e.render();
-    x.into()
+    let a:HttpError = syn::parse(item).unwrap();
+    a.render().into()
 }
 
