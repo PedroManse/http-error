@@ -1,7 +1,9 @@
 use http_error_macro;
 
 fn main() {
-    let x = SQLY(0, 1);
+    let a = SQLX{a:0};
+    let b = SQLY(1, 2);
+    let c = SQLZ{u:3};
     println!("Hello :)");
 }
 
@@ -10,9 +12,10 @@ struct E {
 }
 
 http_error_macro::http_error!(
-    SQLY=(i32, i32)
+    SQLX=E,
+    SQLY=(i32, i32),
+    SQLZ={u:i32}
 );
-//    SQLX=E
 
 //http_error! ( mod se // optinaly put into a module
 //    SocError {

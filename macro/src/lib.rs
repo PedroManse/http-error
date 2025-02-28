@@ -4,6 +4,8 @@ use proc_macro2::TokenStream as TS2;
 use quote::quote;
 use syn::{*, parse::{Parse, ParseStream}};
 
+use self::punctuated::Punctuated;
+
 trait Render {
     fn render(self) -> TS2;
 }
@@ -12,7 +14,32 @@ trait Render {
 struct HttpError {
     mod_name: Option<Ident>,
     name: Ident,
-    items: Vec<ErrorInfo>,
+    items: ItemSeq,
+}
+
+#[derive(Debug)]
+struct ItemSeq(Vec<ErrorInfo>);
+impl Parse for ItemSeq {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut out = vec![];
+        loop {
+            out.push(input.parse()?);
+            match input.parse::<Token![,]>() {
+                Ok(_)=>(),
+                Err(_)=>break
+            }
+        }
+        Ok(ItemSeq(out))
+    }
+}
+
+impl Render for ItemSeq {
+    fn render(self) -> TS2 {
+        let xs = self.0.into_iter().map(|x|x.render());
+        quote! {
+            #(#xs)*
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -36,15 +63,22 @@ impl Parse for ErrorInfo {
 enum ErrorItem {
     Alias(Ident), // don't create type
     Tuple(ExprTuple), // create type
-    Struct(ExprStruct), // create type // manually add prefix
+    Struct(FieldsNamed), // create type // manually add prefix
 }
+
 
 impl Parse for ErrorItem{
     fn parse(input: ParseStream) -> Result<Self> {
-        //let item_alias = input.parse::<Ident>().map(ErrorItem::Alias);
-        let item_tuple = input.parse::<ExprTuple>().map(ErrorItem::Tuple);
-        let item_struct = input.parse::<ExprStruct>().map(ErrorItem::Struct);
-        item_tuple.or(item_struct)
+        let lookahead = input.lookahead1();
+        if lookahead.peek(Ident) {
+            input.parse().map(ErrorItem::Alias)
+        } else if lookahead.peek(token::Paren) {
+            input.parse().map(ErrorItem::Tuple)
+        } else if lookahead.peek(token::Brace) {
+            input.parse().map(ErrorItem::Struct)
+        } else {
+            Err(lookahead.error())
+        }
     }
 }
 
@@ -57,12 +91,13 @@ impl Render for ErrorInfo {
             ErrorItem::Struct(s)=>quote! {struct #name #s}
         }
     }
-
 }
 
 #[proc_macro]
 pub fn http_error(item: TS) -> TS {
-    let e: ErrorInfo = syn::parse(item).unwrap();
-    e.render().into()
+    let a = syn::parse(item);
+    let e: ItemSeq = a.unwrap();
+    let x = e.render();
+    x.into()
 }
 
